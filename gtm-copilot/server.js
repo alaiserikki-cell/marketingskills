@@ -22,8 +22,9 @@ app.use('/api', (req, res, next) => {
   const pw = process.env.APP_PASSWORD;
   if (!pw) return next();
   const [, b64 = ''] = (req.headers.authorization || '').split(' ');
-  const given = Buffer.from(b64, 'base64').toString().split(':').slice(1).join(':');
-  if (given === pw) return next();
+  const [user, ...rest] = Buffer.from(b64, 'base64').toString().split(':');
+  const userOk = !process.env.APP_USER || user === process.env.APP_USER;
+  if (userOk && rest.join(':') === pw) return next();
   res.set('WWW-Authenticate', 'Basic realm="GTM Copilot"').status(401).json({ error: 'Password required' });
 });
 
