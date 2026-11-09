@@ -1,0 +1,20 @@
+{
+  "name": "gtm-copilot",
+  "version": "0.1.0",
+  "description": "End-to-end GTM & growth research copilot built on the marketingskills library. Free stack: Gemini (with Google Search grounding), YouTube Data API, Reddit public JSON, Neon Postgres.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "bundle-skills": "node scripts/bundle-skills.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  }
+}

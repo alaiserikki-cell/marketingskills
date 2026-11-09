@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GTM Copilot</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="brand">GTM Copilot <span class="muted">· growth research on the marketingskills library</span></div>
+    <div class="proj">
+      <select id="projectSelect"></select>
+      <button id="newProjectBtn" class="ghost">+ New</button>
+    </div>
+    <div id="status" class="status"></div>
+  </header>
+
+  <nav id="tabs">
+    <button data-tab="setup" class="active">1 · Setup</button>
+    <button data-tab="questions">2 · CEO questions</button>
+    <button data-tab="company">3 · Company</button>
+    <button data-tab="market">4 · Market</button>
+    <button data-tab="competitors">5 · Competitors</button>
+    <button data-tab="content">6 · Content &amp; posts</button>
+    <button data-tab="strategy">7 · Brand &amp; expansion</button>
+    <button data-tab="experiments">8 · Experiments</button>
+    <button data-tab="growth">9 · Growth OS</button>
+    <button data-tab="skills">10 · Skill lab</button>
+    <button data-tab="reports">11 · Reports</button>
+    <button data-tab="ask">Ask</button>
+  </nav>
+
+  <main id="main"></main>
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
