@@ -299,10 +299,45 @@ function readModelInputs() {
 }
 
 // ---------------- render & events ----------------
+const PAGES = {
+  setup: ['Setup', 'Company details, verified facts and connections'],
+  questions: ['CEO questions', 'Clarifying questions for the founders, and their answers'],
+  company: ['Company', 'What the company sells, traction, segments and positioning'],
+  market: ['Market', 'Market size, categories, trust barriers and trends'],
+  competitors: ['Competitors', 'What worked and what didn’t for competitors and brand analogs'],
+  content: ['Content & posts', 'Posts collected, community listening and content analysis'],
+  strategy: ['Brand & expansion', 'National positioning, localisation and where to expand'],
+  experiments: ['Experiments', 'Live growth experiments, results and reviews'],
+  growth: ['Growth OS', 'The head-of-growth toolkit'],
+  skills: ['Skill lab', 'Run any skill from the marketingskills library'],
+  reports: ['Reports', 'Insight doc, solution doc, playbook and deck outline'],
+  ask: ['Ask', 'Ask anything about this company'],
+};
+
+function renderKpis() {
+  if (!state.project) return ($('#kpis').innerHTML = '');
+  const qs = recs('question');
+  const answered = qs.filter((q) => q.data.answer?.trim()).length;
+  const growthDone = state.catalog.modules.filter((m) => artifact(`g_${m.key}`)).length;
+  const cards = [
+    ['Verified facts', recs('fact').length, '', 'setup'],
+    ['CEO answers', answered, `/ ${qs.length}`, 'questions'],
+    ['Competitors researched', recs('competitor').length, '', 'competitors'],
+    ['Posts collected', recs('post').length, '', 'content'],
+    ['Growth modules run', growthDone, `/ ${state.catalog.modules.length}`, 'growth'],
+  ];
+  $('#kpis').innerHTML = cards.map(([l, v, suf, tab]) => `<button class="kpi" data-tab="${tab}"><span class="k-label">${l}</span><span class="k-value">${v}<small>${suf}</small></span></button>`).join('');
+}
+
 function render() {
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.tab));
+  const [title, sub] = PAGES[state.tab] || ['', ''];
+  $('#pageTitle').textContent = state.project ? title : 'Welcome';
+  $('#pageSub').textContent = state.project ? `${state.project.name} · ${sub}` : 'Create a project to begin';
+  document.title = `${title} · GTM Copilot`;
   const s = state.status;
   $('#status').innerHTML = `<span class="pill ${s.gemini ? 'ok' : 'no'}">Gemini</span><span class="pill ${s.youtube ? 'ok' : 'no'}">YouTube</span><span class="pill ${s.storage === 'neon' ? 'ok' : 'no'}">${s.storage === 'neon' ? 'Neon' : 'Local storage'}</span>`;
+  renderKpis();
   if (!state.project) {
     $('#main').innerHTML = `<div class="card"><h2>Start</h2><p class="hint">Create a project for any company, or load the Circle case (pre-filled with facts from the Mesa problem statement).</p>
       <div class="row"><button id="seedCircle">Load Circle case</button><button class="ghost" id="newProjectBtn2">New project</button></div></div>`;
