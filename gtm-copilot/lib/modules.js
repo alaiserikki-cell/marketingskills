@@ -111,7 +111,8 @@ TASK: Teardown of **${name}** ${analog ? `as a BRAND-BUILDING ANALOG for ${proje
 Sections:
 1. **Snapshot** — what they do, founded, funding/scale (dated), core audience
 2. **Positioning & brand** — tagline/claims in their own words, what they stand for; ONE national brand or adapted by city/language? what stays consistent vs changes
-3. **How they won their first market and expanded** — timeline of key moves (dated); first city/segment; what unlocked the next markets
+3. **How they won their first market** — first city/segment/category, the wedge, and what made it work there (dated)
+3b. **Where they expanded next, and how** — REQUIRED, never skip. A table in chronological order: | Step | When | Where next (city / region / tier / country) | What next (category or segment added) | How they entered (local ops or hubs, partners, acquisitions, local-language marketing, offline activation, pricing, creators) | Result (metric or outcome) | Source |. Cover geography explicitly (which cities in what order, metro → tier-2/3 → Bharat or abroad), not only category moves. Include expansions they pulled back from. Then 2-3 bullets: what triggered each move (funding, saturation, demand data, competitor) and the repeatable city-launch playbook if one is visible. If the order or dates are not public, say "not public" in that cell instead of guessing.
 4. **Organic growth engine** — content formats, creators/influencers, communities, cultural moments, regional language use, referral loops, PR; examples with links if found
 5. **What worked** — table: | Move / bet | When | Evidence it worked (metric, coverage, growth) | Source |
 6. **What didn't work** — table: | Move / bet | When | What happened (shut down, pulled back from a city/category, pivoted, backlash, layoffs, stalled growth) | Source |. Only include failures you found evidence for; if none found, say "no public evidence found" rather than inventing.
