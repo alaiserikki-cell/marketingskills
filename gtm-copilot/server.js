@@ -11,6 +11,7 @@ import { listSkills } from './lib/skills.js';
 import { seedCircle } from './lib/seed.js';
 import * as G from './lib/growth.js';
 import * as K from './lib/knowledge.js';
+import * as C from './lib/creative.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -79,6 +80,18 @@ app.delete('/api/projects/:id/records/:kind', h((req) => db.deleteRecordsByKind(
 app.post('/api/projects/:id/run/profile', h((req) => M.runProfile(pid(req))));
 app.post('/api/projects/:id/run/market', h((req) => M.runMarket(pid(req))));
 app.post('/api/projects/:id/run/discover-competitors', h((req) => M.discoverCompetitors(pid(req))));
+// ---------- creative studio ----------
+app.get('/api/projects/:id/creative/research', h((req) => C.researchStatus(pid(req))));
+app.post('/api/projects/:id/creative/avatar', h((req) => C.runAvatar(pid(req), req.body.focus)));
+app.post('/api/projects/:id/creative/brief', h((req) => C.runBrief(pid(req), req.body)));
+app.post('/api/projects/:id/creative/script/:bid', h((req) => C.runScript(pid(req), req.params.bid, req.body)));
+app.get('/api/projects/:id/creative-pack.md', async (req, res) => {
+  try {
+    res.set('Content-Type', 'text/markdown; charset=utf-8').set('Content-Disposition', 'attachment; filename="creative-pack.md"');
+    res.send(await C.creativePack(pid(req)));
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 // ---------- knowledge hub ----------
 app.post('/api/projects/:id/kb/insights', h((req) => K.runInsights(pid(req), req.body.topic)));
 app.post('/api/projects/:id/kb/library', h((req) => K.runLibrary(pid(req), req.body.topic)));

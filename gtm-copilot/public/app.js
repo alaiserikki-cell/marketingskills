@@ -1,7 +1,11 @@
 // GTM Copilot front end — plain JS, no build step.
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const md = (t = '') => DOMPurify.sanitize(marked.parse(t));
+// Links open in a new tab; a link whose text is a bare domain (an inline citation) renders as a small source tag.
+const md = (t = '') => DOMPurify.sanitize(marked.parse(t))
+  .replace(/<a href="([^"]+)">([a-z0-9-]+(?:\.[a-z0-9-]+)+)<\/a>/g, '<a class="cite" title="Open source" href="$1">$2</a>')
+  .replace(/<a /g, '<a target="_blank" rel="noopener" ');
+const citeLinks = (srcs = []) => srcs.map((s) => `<a class="cite" href="${esc(s.url)}" target="_blank" rel="noopener" title="Open source">${esc(s.site)}</a>`).join(' ');
 
 const state = { projectId: null, project: null, records: [], tab: 'setup', status: {}, catalog: { modules: [], modelInputs: [], skills: [] }, modelPreview: null };
 
@@ -45,7 +49,7 @@ const P = (path) => `/api/projects/${state.projectId}${path}`;
 
 function sourcesHtml(sources = []) {
   if (!sources.length) return '';
-  return `<div class="sources"><b>Sources (${sources.length})</b><ol>${sources.map((s) => `<li><a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title)}</a></li>`).join('')}</ol></div>`;
+  return `<details class="sources"><summary>All ${sources.length} sources searched</summary><ol>${sources.map((s) => `<li><a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title)}</a></li>`).join('')}</ol></details>`;
 }
 
 function artifactCard(key, title, hint, runPath, extraBtns = '') {
@@ -314,13 +318,14 @@ function kbBlock(r, body) {
 const KB_RENDER = {
   insights: (r) => kbBlock(r, `<div class="kgrid">${(r.data.cards || []).map((c) => `<div class="kcard">
       <div class="kstat">${esc(c.stat)}</div><div class="khead">${esc(c.insight)}</div>
-      <div class="meta">${esc(c.publisher)} · ${esc(c.date)}</div>
+      <div class="meta">${esc(c.publisher)} · ${esc(c.date)} ${citeLinks(c.sources)}</div>
       <div class="kso"><b>So what:</b> ${esc(c.so_what)}</div>${motTag(c.motivation)}</div>`).join('')}</div>`),
   library: (r) => kbBlock(r, `<div class="kgrid">${(r.data.cards || []).map((c) => `<div class="kcard">
       <div class="khead">${esc(c.brand)} <span class="meta">${esc(c.year)}</span></div>
       <div class="kcamp">${esc(c.campaign)}</div>
       <p><b>What they did:</b> ${esc(c.tactic)}</p><p><b>Why it worked:</b> ${esc(c.why_it_worked)}</p>
       <p class="meta"><b>Result:</b> ${esc(c.result)}</p>
+      ${c.sources?.length ? `<div class="kcite">Read more: ${citeLinks(c.sources)}</div>` : ''}
       <div class="kso"><b>Steal for ${esc(state.project.name)}:</b> ${esc(c.lesson)}</div>
       <span class="tag">${esc(c.channel)}</span>${motTag(c.motivation)}</div>`).join('')}</div>`),
   trends: (r) => kbBlock(r, `
@@ -329,7 +334,7 @@ const KB_RENDER = {
         <td>${c.error ? `<span class="meta">${esc(c.error)}</span>` : `<span class="trend-line">${spark(c.series.map((s) => s.views))}</span>`}</td>
         <td>${c.monthly_avg_last3?.toLocaleString('en-IN') ?? '—'}</td><td>${pctTag(c.growth_yoy_pct)}</td><td>${pctTag(c.momentum_pct)}</td></tr>`).join('')}</table>
       <p class="meta">Wikipedia views measure attention, not searches or sales, and are falling across the board as AI answers replace clicks. Compare topics with each other rather than reading a drop as decline.</p>
-      ${r.data.scout ? `<h3>Why each is rising</h3><table class="simple"><tr><th>Topic</th><th>Evidence</th><th>Relevance</th></tr>${r.data.scout.items.map((i) => `<tr><td>${esc(i.term)}</td><td>${esc(i.why_rising)} <span class="meta">(${esc(i.evidence_date)})</span></td><td>${esc(i.relevance)}</td></tr>`).join('')}</table>` : ''}`),
+      ${r.data.scout ? `<h3>Why each is rising</h3><table class="simple"><tr><th>Topic</th><th>Evidence</th><th>Relevance</th></tr>${r.data.scout.items.map((i) => `<tr><td>${esc(i.term)}</td><td>${esc(i.why_rising)} <span class="meta">(${esc(i.evidence_date)})</span> ${citeLinks(i.sources)}</td><td>${esc(i.relevance)}</td></tr>`).join('')}</table>` : ''}`),
   traffic: (r) => kbBlock(r, `
       <table class="simple"><tr><th>Domain</th><th>Tranco rank</th><th>Rank, last 30 days</th><th>Change in 30 days</th></tr>
       ${(r.data.rows || []).map((x) => `<tr><td><b>${esc(x.domain)}</b></td>
@@ -362,6 +367,116 @@ TABS.knowledge = () => {
     }).join('')}`;
 };
 
+// ---------------- Creative studio (5-step creative strategy process) ----------------
+const STAGES = ['Unaware', 'Problem aware', 'Solution aware', 'Product aware', 'Most aware'];
+const adLibrary = (name) => `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=IN&search_type=keyword_unordered&q=${encodeURIComponent(name)}`;
+
+function researchChecklist() {
+  const r = state.records;
+  const art = (k) => r.some((x) => x.kind === 'artifact' && x.key === k);
+  const owners = new Set(recs('post').map((p) => p.data.owner));
+  const answered = recs('question').filter((q) => q.data.answer?.trim()).length;
+  const groups = [
+    ['Competitor research', [
+      ['Competitor breakdowns', recs('competitor').length > 0, `${recs('competitor').length} done`, 'competitors'],
+      ['Posts from your account and competitors', owners.size > 1, `${owners.size} accounts`, 'content'],
+    ]],
+    ['Brand research (the handover from the team)', [
+      ['Verified facts', recs('fact').length > 0, `${recs('fact').length} facts`, 'setup'],
+      ['CEO answers', answered > 0, `${answered} answered`, 'questions'],
+      ['Company profile', art('company_profile'), '', 'company'],
+    ]],
+    ['Market research', [
+      ['Market research', art('market_research'), '', 'market'],
+      ['Community listening (reviews, Reddit, forums)', art('community_listening'), '', 'content'],
+      ['Knowledge hub (insights, campaigns, trends)', recs('kb').length > 0, `${recs('kb').length} saved`, 'knowledge'],
+    ]],
+  ];
+  const all = groups.flatMap((g) => g[1]);
+  return { html: groups.map(([g, items]) => `<div><h3>${g}</h3>${items.map(([l, ok, d, tab]) => `<div class="check ${ok ? 'ok' : ''}"><span class="dot">${ok ? '✓' : ''}</span><span style="flex:1">${l} ${d ? `<span class="meta">${esc(d)}</span>` : ''}</span><button class="small ghost" data-tab="${tab}">${ok ? 'Open' : 'Do it'}</button></div>`).join('')}</div>`).join(''), done: all.filter((x) => x[1]).length, total: all.length };
+}
+
+function briefCard(b) {
+  const d = b.data;
+  const script = recs('script').find((s) => s.key === String(b.id));
+  return `<div class="kcard brief ${d.status}">
+    <div class="row" style="margin:0"><span class="tag">${esc(d.awareness_stage)}</span>${motTag(d.motivation)}<span class="tag">${esc(d.platform)}</span>
+      <select data-bstatus="${b.id}" style="margin-left:auto">${['draft', 'approved', 'rejected'].map((s) => `<option ${s === d.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+    <div class="khead">${esc(d.concept)}</div>
+    <div class="hook">“${esc(d.hook)}”</div>
+    <p><b>Avatar:</b> ${esc(d.avatar)} · <b>Trigger:</b> ${esc(d.trigger)}</p>
+    <p><b>Angle:</b> ${esc(d.angle)}</p>
+    <p><b>Format:</b> ${esc(d.format)} · <b>CTA:</b> ${esc(d.cta)}</p>
+    <p><b>Key message:</b> ${esc(d.key_message)}</p>
+    <p class="${/^needs proof/i.test(d.proof || '') ? 'warnline' : ''}"><b>Proof:</b> ${esc(d.proof)}</p>
+    <p class="meta"><b>Visuals:</b> ${esc(d.visual_direction)}</p>
+    ${d.reference ? `<p class="meta"><b>Reference:</b> ${esc(d.reference)}</p>` : ''}
+    <div class="row" style="margin:0"><button class="small danger" data-del="${b.id}">Delete</button>${script ? '<span class="meta">Script written ✓</span>' : ''}</div>
+  </div>`;
+}
+
+function scriptBlock(b) {
+  const s = recs('script').find((x) => x.key === String(b.id))?.data;
+  const head = `<div class="row"><input id="tone-${b.id}" class="grow" placeholder="Tone and language, e.g. Hinglish, Gen Z, Bengaluru" value="${esc(s?.tone || '')}"><input id="dur-${b.id}" placeholder="Length, e.g. 30s" size="10"><button data-script="${b.id}">${s ? 'Rewrite' : 'Write script'}</button></div>`;
+  if (!s) return `<details class="kb" open><summary>${esc(b.data.concept)}</summary>${head}<p class="meta">Not written yet.</p></details>`;
+  return `<details class="kb"><summary>${esc(s.title || b.data.concept)} <span class="meta">${esc(s.platform)} · ${esc(s.duration)}</span></summary>${head}
+    <p><b>Speaks to:</b> ${esc(s.audience_note)}</p>
+    <p><b>Hook options</b></p><ol>${(s.hooks || []).map((h) => `<li>${esc(h)}</li>`).join('')}</ol>
+    <table class="simple"><tr><th>Time</th><th>Visual</th><th>Audio</th><th>On-screen text</th><th>Edit note</th></tr>
+    ${(s.scenes || []).map((x) => `<tr><td>${esc(x.time)}</td><td>${esc(x.visual)}</td><td>${esc(x.audio)}</td><td>${esc(x.on_screen_text)}</td><td class="meta">${esc(x.edit_note)}</td></tr>`).join('')}</table>
+    <p><b>CTA:</b> ${esc(s.cta)}</p><p><b>Caption:</b> ${esc(s.caption)} <span class="meta">${(s.hashtags || []).map(esc).join(' ')}</span></p>
+    <p><b>Shoot needs:</b> ${(s.shoot_needs || []).map(esc).join('; ')}</p>
+    <p class="meta"><b>Proof used:</b> ${esc(s.proof_used)} · <b>Success metric:</b> ${esc(s.success_metric)}</p></details>`;
+}
+
+TABS.creative = () => {
+  const research = researchChecklist();
+  const avatar = artifact('cs_avatar');
+  const briefs = recs('brief');
+  const approved = briefs.filter((b) => b.data.status === 'approved');
+  const scripts = recs('script');
+  const steps = [
+    ['Research', research.done >= 5], ['Audience & awareness', Boolean(avatar)], ['Brief', briefs.length > 0],
+    ['Approval → Script', scripts.length > 0], ['Present', approved.length > 0 && approved.every((b) => scripts.some((s) => s.key === String(b.id)))],
+  ];
+  const goals = [...new Set(briefs.map((b) => b.data.goal))];
+  const comps = recs('competitor').map((c) => c.key);
+  return `<div class="card"><h2>Creative studio</h2>
+    <p class="hint">The creative strategist's process, from research to a script the team can approve: research, audience and awareness stage, brief, approval, script, then present.</p>
+    <div class="stepper">${steps.map(([l, ok], i) => `<a href="#cs-${i + 1}" class="step ${ok ? 'done' : ''}"><span class="n">${ok ? '✓' : i + 1}</span>${l}</a>`).join('')}</div></div>
+
+  <div class="card" id="cs-1"><h2>1 · Research</h2>
+    <p class="hint">Three kinds of research feed every brief: competitors, the brand itself, and the market. ${research.done}/${research.total} done. Each item links to the tab where you do it.</p>
+    <div class="grid2">${research.html}</div>
+    ${comps.length ? `<h3>Competitors' live ads</h3><p class="meta">Meta has no free ads API for India, so these open each brand's public Meta Ad Library page.</p><div class="row">${comps.map((c) => `<a class="tag" href="${adLibrary(c)}" target="_blank" rel="noopener">${esc(c)} ↗</a>`).join('')}</div>` : ''}
+  </div>
+
+  <div class="card" id="cs-2"><h2>2 · Audience avatar &amp; stage of awareness</h2>
+    <p class="hint">Who we're talking to, in their own words (quotes from reviews and Reddit, with sources), and where they sit on the awareness ladder: ${STAGES.join(' → ')}. Scripts reuse the language bank so they sound like the audience, not like us.</p>
+    <div class="row"><input id="csFocus" class="grow" placeholder="Optional focus, e.g. sellers in Hyderabad, or Gen Z buyers of used iPhones" value="${esc(avatar?.data.focus || '')}"><button data-cs="avatar">${avatar ? 'Re-run' : 'Build avatars'}</button></div>
+    ${avatar ? outputBlock(avatar) : '<p class="meta">Not built yet.</p>'}
+  </div>
+
+  <div class="card" id="cs-3"><h2>3 · Ideation: the brief</h2>
+    <p class="hint">Start from the campaign goal (a sale, a festive push, a city launch, retargeting), then concepts with angle, hook, format, proof, CTA and references. Set each concept to <b>approved</b> before scripting it. Proof only comes from your research; gaps show as "needs proof".</p>
+    <div class="row"><input id="csGoal" class="grow" placeholder="Campaign goal, e.g. Diwali upgrade: sell your old phone, buy a verified one">
+      <input id="csAud" placeholder="Audience (optional)"><select id="csPlat"><option value="">All organic platforms</option><option>Instagram Reels</option><option>YouTube Shorts</option><option>Reddit</option><option>LinkedIn</option></select>
+      <select id="csCount"><option>4</option><option selected>6</option><option>8</option></select><button data-cs="brief">Write brief</button></div>
+    ${goals.map((g) => `<h3>Goal: ${esc(g)}</h3><div class="kgrid">${briefs.filter((b) => b.data.goal === g).map(briefCard).join('')}</div>`).join('') || '<p class="meta">No concepts yet.</p>'}
+  </div>
+
+  <div class="card" id="cs-4"><h2>4 · Scripting</h2>
+    <p class="hint">Only approved concepts can be scripted. Each script has hook options, a scene-by-scene table (visual, audio, on-screen text, edit notes), caption, shoot needs and the metric that says it worked. Write in the audience's tone, not yours.</p>
+    ${approved.map(scriptBlock).join('') || '<p class="meta">Approve a concept in step 3 first.</p>'}
+  </div>
+
+  <div class="card" id="cs-5"><h2>5 · Present</h2>
+    <p class="hint">One document for the client or your manager: who we're talking to, then each approved concept with its script, visuals, editing notes and references. Paste it into Google Docs or Notion.</p>
+    <div class="row"><a href="${P('/creative-pack.md')}"><button>Download creative pack (.md)</button></a><button class="ghost" id="csCopy">Copy pack</button>
+      <span class="meta">${approved.length} approved · ${approved.filter((b) => scripts.some((s) => s.key === String(b.id))).length} scripted</span></div>
+  </div>`;
+};
+
 function readModelInputs() {
   const inputs = {}, sources = {};
   document.querySelectorAll('[data-mi]').forEach((i) => { if (i.value.trim() !== '') inputs[i.dataset.mi] = i.value.replace(/[,₹\s]/g, ''); });
@@ -375,6 +490,7 @@ const PAGES = {
   questions: ['CEO questions', 'Clarifying questions for the founders, and their answers'],
   company: ['Company', 'What the company sells, traction, segments and positioning'],
   market: ['Market', 'Market size, categories, trust barriers and trends'],
+  creative: ['Creative studio', 'Research → audience → brief → script → present'],
   knowledge: ['Knowledge hub', 'Consumer insights, campaign library, trends and traffic'],
   competitors: ['Competitors', 'What worked and what didn’t for competitors and brand analogs'],
   content: ['Content & posts', 'Posts collected, community listening and content analysis'],
@@ -469,6 +585,17 @@ document.addEventListener('click', async (ev) => {
     const k = t.dataset.grun;
     return run(t, () => api('POST', P(`/growth/${k}`), { input: $(`#gin-${k}`)?.value || '', artifactKey: $(`#gart-${k}`)?.value || '' }), 'Done');
   }
+  if (t.dataset.cs === 'avatar') return run(t, () => api('POST', P('/creative/avatar'), { focus: val('#csFocus') }), 'Avatars ready');
+  if (t.dataset.cs === 'brief') {
+    if (!val('#csGoal')) return toast('Write the campaign goal first', true);
+    return run(t, () => api('POST', P('/creative/brief'), { goal: val('#csGoal'), audience: val('#csAud'), platform: val('#csPlat'), count: Number(val('#csCount')) }), 'Brief ready: approve the concepts you like');
+  }
+  if (t.dataset.script) return run(t, () => api('POST', P(`/creative/script/${t.dataset.script}`), { tone: val(`#tone-${t.dataset.script}`), duration: val(`#dur-${t.dataset.script}`) }), 'Script ready');
+  if (id === 'csCopy') {
+    const r = await fetch(P('/creative-pack.md'));
+    await navigator.clipboard.writeText(await r.text());
+    return toast('Creative pack copied');
+  }
   if (t.dataset.kb) {
     const k = t.dataset.kb;
     const q = val(`#kbq-${k}`);
@@ -506,7 +633,7 @@ document.addEventListener('click', async (ev) => {
     case 'runComps': { const names = val('#compNames').split(',').map((s) => s.trim()).filter(Boolean); if (!names.length) return; t.disabled = true; return tearDown(names, val('#compGroup')); }
     case 'analogs': t.disabled = true; return tearDown(['Meesho', 'Blinkit', 'Zepto', 'Flipkart'], 'brand-analog');
     case 'importCsv': return run(t, () => api('POST', P('/posts/csv'), { csv: $('#csv').value, owner: val('#csvOwner') }).then((r) => toast(`Imported ${r.imported} posts`)));
-    case 'ytFetch': return run(t, () => api('POST', P('/posts/youtube-channel'), { channel: val('#ytChannel'), owner: val('#ytOwner') }).then((r) => toast(`${r.channel.title}: ${r.imported} videos, ${r.channel.subscribers.toLocaleString()} subscribers`)));
+    case 'ytFetch': return run(t, () => api('POST', P('/posts/youtube-channel'), { channel: val('#ytChannel'), owner: val('#ytOwner') }).then((r) => toast(`${r.channel.title}: ${r.imported} videos${r.channel.subscribers != null ? `, ${r.channel.subscribers.toLocaleString()} subscribers` : ' (public feed, latest 15)'}`)));
     case 'ytSearch': return run(t, () => api('POST', P('/posts/youtube-search'), { query: val('#ytQuery') }).then((r) => toast(`Imported ${r.imported} videos`)));
     case 'rdFetch': return run(t, () => api('POST', P('/posts/reddit'), { query: val('#rdQuery') }).then((r) => toast(r.listening ? 'Reddit blocked anonymous access — community listening report generated instead' : `Imported ${r.imported} threads`)));
     case 'modelCalc': { const { inputs } = readModelInputs(); state.modelPreview = await api('POST', '/api/growth-model/compute', { inputs }); return render(); }
@@ -533,6 +660,7 @@ document.addEventListener('change', async (ev) => {
     if (el.dataset.answer) { await api('PUT', `/api/records/${el.dataset.answer}`, { answer: el.value, status: el.value.trim() ? 'answered' : 'open' }); toast('Answer saved'); }
     else if (el.dataset.prio) await api('PUT', `/api/records/${el.dataset.prio}`, { priority: el.value });
     else if (el.dataset.status) await api('PUT', `/api/records/${el.dataset.status}`, { status: el.value });
+    else if (el.dataset.bstatus) { await api('PUT', `/api/records/${el.dataset.bstatus}`, { status: el.value }); toast(`Concept ${el.value}`); return loadProject(); }
     else if (el.id === 'projectSelect') { state.projectId = Number(el.value); return loadProject(); }
     else return;
     const r = state.records.find((x) => x.id === Number(el.dataset.answer || el.dataset.prio || el.dataset.status));

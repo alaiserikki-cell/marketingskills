@@ -111,11 +111,39 @@ async function videoDetails(ids) {
   });
 }
 
+// No API key: YouTube's public channel feed (latest 15 uploads with view counts; no likes/comments).
+const xmlText = (s = '') => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+async function youtubeFeed(handle) {
+  let id = handle.startsWith('UC') ? handle : null;
+  if (!id) {
+    const page = await fetch(`https://www.youtube.com/${handle.startsWith('@') ? handle : `@${handle}`}`, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en' } });
+    id = (await page.text()).match(/"externalId":"(UC[\w-]+)"/)?.[1];
+  }
+  if (!id) throw new Error(`No YouTube channel found for "${handle}"`);
+  const xml = await (await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${id}`)).text();
+  const title = xmlText(xml.match(/<title>([^<]*)<\/title>/)?.[1] || handle);
+  const posts = xml.split('<entry>').slice(1).map((e) => {
+    const vid = e.match(/<yt:videoId>([^<]+)/)?.[1];
+    return {
+      platform: 'youtube',
+      title: xmlText(e.match(/<title>([^<]*)<\/title>/)?.[1] || ''),
+      caption: xmlText(e.match(/<media:description>([\s\S]*?)<\/media:description>/)?.[1] || '').slice(0, 500),
+      channel: title,
+      date: (e.match(/<published>([^<]{10})/)?.[1]) || '',
+      format: /\/shorts\//.test(e) ? 'short' : 'video',
+      views: +(e.match(/views="(\d+)"/)?.[1] || 0),
+      url: `https://www.youtube.com/watch?v=${vid}`,
+    };
+  });
+  return { channel: { title, channel_id: id, note: 'From the public feed (latest 15 videos, views only). Add YOUTUBE_API_KEY for full history, likes and comments.' }, posts };
+}
+
 // Latest uploads of a channel. Accepts "@handle", channel ID "UC...", or a channel URL.
 export async function youtubeChannel(input, max = 50) {
   let handle = input.trim();
   const m = handle.match(/youtube\.com\/(@[\w.-]+|channel\/(UC[\w-]+))/);
   if (m) handle = m[2] || m[1];
+  if (!process.env.YOUTUBE_API_KEY) return youtubeFeed(handle);
   const params = { part: 'snippet,statistics,contentDetails' };
   if (handle.startsWith('UC')) params.id = handle;
   else params.forHandle = handle.startsWith('@') ? handle : `@${handle}`;

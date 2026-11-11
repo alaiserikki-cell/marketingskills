@@ -18,11 +18,21 @@ async function researchThenStructure({ skills, research, schema }) {
 
 Write your findings as a markdown list. For every item give the source publication and date in brackets. Only include items you found in a source.`, grounded: true });
   if (!r.sources?.length) throw new Error('Search returned no sources this time, so nothing was saved. Try again or rephrase.');
-  const j = await generateJSON({ system: 'You convert research notes into JSON. Use ONLY facts present in the notes. Never add facts, numbers or examples.', prompt: `NOTES:
-${r.text}
+  // Swap each inline citation link for a short id (S1, S2…) so the JSON step can attach
+  // the right sources to each item without retyping long URLs.
+  const ids = new Map();
+  const notes = r.text.replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, (m, label, url) => {
+    if (!ids.has(url)) ids.set(url, { id: `S${ids.size + 1}`, site: label, url });
+    return `[${ids.get(url).id}]`;
+  });
+  const byId = new Map([...ids.values()].map((s) => [s.id, s]));
+  const j = await generateJSON({ system: 'You convert research notes into JSON. Use ONLY facts present in the notes. Never add facts, numbers or examples.', prompt: `NOTES (source ids like [S3] mark which source backs each statement):
+${notes}
 
-${schema}` });
-  const data = Array.isArray(j.data) ? j.data : Object.values(j.data).find(Array.isArray) || [];
+${schema}
+Every object must also have "src": the list of source ids (e.g. ["S3","S7"]) that appear next to that item's facts in the notes. Use [] if none.` });
+  const raw = Array.isArray(j.data) ? j.data : Object.values(j.data).find(Array.isArray) || [];
+  const data = raw.map(({ src, ...item }) => ({ ...item, sources: (src || []).map((id) => byId.get(String(id).replace(/[[\]]/g, ''))).filter(Boolean).map(({ site, url }) => ({ site, url })) }));
   return { data, notes: r.text, sources: r.sources, model: r.model };
 }
 

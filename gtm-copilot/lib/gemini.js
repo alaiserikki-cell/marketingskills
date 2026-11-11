@@ -46,6 +46,73 @@ function retryDelayMs(err) {
  * grounded=true turns on Google Search grounding and returns the web sources Gemini used.
  * Returns { text, sources: [{title, uri}], queries: [] , model }
  */
+// Short label for a citation link: the site's domain (Gemini puts it in the chunk title).
+export function siteLabel(title = '', uri = '') {
+  const t = String(title).trim().toLowerCase().replace(/^www\./, '');
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(t)) return t;
+  try { const h = new URL(uri).hostname.replace(/^www\./, ''); if (!h.includes('vertexaisearch')) return h; } catch {}
+  return t.slice(0, 30) || 'source';
+}
+
+// Grounding links are Google redirects that can expire; swap each for the real article URL.
+async function resolveRedirects(gm) {
+  const webs = (gm.groundingChunks || []).map((c) => c.web).filter((w) => w?.uri?.includes('vertexaisearch.cloud.google.com'));
+  const cache = new Map();
+  const one = async (uri) => {
+    try {
+      const r = await fetch(uri, { redirect: 'manual', signal: AbortSignal.timeout(6000) });
+      const loc = r.headers.get('location');
+      return loc && /^https?:\/\//.test(loc) ? loc : uri;
+    } catch { return uri; }
+  };
+  const uniq = [...new Set(webs.map((w) => w.uri))];
+  for (let i = 0; i < uniq.length; i += 8) {
+    const batch = uniq.slice(i, i + 8);
+    (await Promise.all(batch.map(one))).forEach((u, k) => cache.set(batch[k], u));
+  }
+  for (const w of webs) w.uri = cache.get(w.uri) || w.uri;
+}
+
+// Put a source link right after each claim it supports, using Gemini's groundingSupports
+// (which say which text segment each search result backs). Links go to the original page.
+function addInlineCitations(text, gm) {
+  const chunks = (gm.groundingChunks || []).map((c) => c.web).filter(Boolean);
+  const supports = gm.groundingSupports || [];
+  if (!chunks.length || !supports.length) return text;
+  const at = new Map(); // character position -> Set of chunk indexes
+  let cursor = 0;
+  for (const s of supports) {
+    const seg = s.segment || {};
+    const idxs = (s.groundingChunkIndices || []).filter((i) => chunks[i]);
+    if (!idxs.length) continue;
+    const segText = (seg.text || '').trimEnd();
+    let pos = -1;
+    if (segText) {
+      let found = text.indexOf(segText, cursor);
+      if (found < 0) found = text.indexOf(segText);
+      if (found >= 0) { pos = found + segText.length; cursor = found; }
+    }
+    if (pos < 0 && Number.isInteger(seg.endIndex)) {
+      // endIndex is a UTF-8 byte offset; convert to a character offset.
+      pos = Buffer.from(text, 'utf8').subarray(0, seg.endIndex).toString('utf8').trimEnd().length;
+    }
+    if (pos < 0) continue;
+    // Don't land inside a markdown link or a word.
+    while (pos < text.length && /[\w)\]*_]/.test(text[pos]) && text[pos] !== '\n' && text[pos] !== '|') pos++;
+    const set = at.get(pos) || new Set();
+    idxs.forEach((i) => set.add(i));
+    at.set(pos, set);
+  }
+  let out = text;
+  for (const [pos, set] of [...at.entries()].sort((a, b) => b[0] - a[0])) {
+    const seen = new Set();
+    const links = [...set].map((i) => chunks[i]).filter((w) => (seen.has(w.uri) ? false : seen.add(w.uri))).slice(0, 3)
+      .map((w) => `[${siteLabel(w.title, w.uri)}](${w.uri})`);
+    out = `${out.slice(0, pos)} ${links.join(' ')}${out.slice(pos)}`;
+  }
+  return out;
+}
+
 export async function generate({ system = '', prompt, grounded = false, json = false, temperature = 0.4 }) {
   if (!hasGemini()) throw new Error('GEMINI_API_KEYS is not set. Add it to gtm-copilot/.env and restart.');
   const model = await getModel();
@@ -79,8 +146,10 @@ export async function generate({ system = '', prompt, grounded = false, json = f
     if (!res.ok) throw new Error(`Gemini error ${res.status}: ${data?.error?.message || 'unknown'}`);
 
     const cand = data.candidates?.[0];
-    const text = (cand?.content?.parts || []).map((p) => p.text || '').join('');
+    const raw = (cand?.content?.parts || []).map((p) => p.text || '').join('');
     const gm = cand?.groundingMetadata || {};
+    if (grounded) await resolveRedirects(gm);
+    const text = grounded ? addInlineCitations(raw, gm) : raw;
     const seen = new Set();
     const sources = (gm.groundingChunks || [])
       .map((c) => c.web)

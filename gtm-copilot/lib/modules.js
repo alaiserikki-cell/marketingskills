@@ -7,6 +7,8 @@ import { kbContext } from './knowledge.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const clip = (s = '', n = 5000) => (s.length > n ? `${s.slice(0, n)}\n…[truncated]` : s);
+// Inline citation links are long; in prompts keep just the site name, e.g. (livemint.com).
+const noUrls = (s = '') => s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '($1)');
 
 // ---------------- shared context ----------------
 // Everything the project knows so far: basics, verified facts, CEO answers and earlier module outputs.
@@ -31,10 +33,10 @@ export async function buildContext(pid, { include = 'all', maxPer = 4500, exclud
     for (const a of artifacts) {
       if (a.key === 'ask' || a.key === exclude) continue;
       maxPer = per;
-      ctx += `\n## Earlier analysis: ${a.key} (${(a.data.generated_at || '').slice(0, 10)})\n${clip(a.data.text, maxPer)}\n`;
+      ctx += `\n## Earlier analysis: ${a.key} (${(a.data.generated_at || '').slice(0, 10)})\n${clip(noUrls(a.data.text), maxPer)}\n`;
     }
     ctx += kbContext(recs);
-    if (comps.length) ctx += `\n## Competitor teardowns\n${comps.map((c) => `### ${c.key} (${c.data.group})\n${clip(c.data.text, 2200)}`).join('\n')}\n`;
+    if (comps.length) ctx += `\n## Competitor teardowns\n${comps.map((c) => `### ${c.key} (${c.data.group})\n${clip(noUrls(c.data.text), 2200)}`).join('\n')}\n`;
   }
   return { project: p, ctx, recs };
 }

@@ -126,6 +126,8 @@ table.simple input { width: 100%; }
 .md blockquote { margin: 10px 0; padding: 8px 14px; border-left: 3px solid var(--k5); background: var(--soft); border-radius: 0 8px 8px 0; }
 .sources { font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 14px; padding-top: 8px; }
 .sources a, .md a { color: var(--accent-ink); }
+a.cite { display: inline-block; font-size: 11px; font-weight: 600; line-height: 1.5; padding: 0 6px; margin: 0 1px; border-radius: 6px; background: var(--soft); color: var(--accent-ink); text-decoration: none; vertical-align: 1px; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+a.cite:hover { background: var(--active); color: var(--active-ink); }
 
 details { border: 1px solid var(--line); border-radius: 11px; padding: 10px 14px; margin: 8px 0; background: var(--panel); }
 summary { cursor: pointer; font-weight: 700; }
@@ -140,6 +142,9 @@ details.kb[open] summary { margin-bottom: 10px; }
 .kstat { font-size: 22px; font-weight: 800; color: var(--accent-ink); letter-spacing: -.3px; line-height: 1.2; }
 .khead { font-weight: 700; }
 .kcamp { font-weight: 600; color: var(--muted); }
+.kcite { font-size: 12.5px; color: var(--muted); }
+details.sources { border: 0; border-top: 1px dashed var(--line); border-radius: 0; padding: 8px 0 0; background: transparent; }
+details.sources summary { font-weight: 600; font-size: 12.5px; }
 .kso { background: var(--soft); border-radius: 8px; padding: 7px 9px; margin-top: auto; }
 .trend-line { color: var(--k5); display: inline-block; vertical-align: middle; }
 .spark { display: block; }
@@ -151,6 +156,19 @@ details.kb[open] summary { margin-bottom: 10px; }
 .tag.mot-circular { background: color-mix(in srgb, var(--active) 45%, transparent); }
 .tag.mot-convenience { background: color-mix(in srgb, var(--k3) 22%, transparent); }
 .tag.mot-discovery { background: color-mix(in srgb, var(--k1) 18%, transparent); }
+
+/* ---------- creative studio ---------- */
+.stepper { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.step { display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 7px; border-radius: 99px; border: 1px solid var(--line); text-decoration: none; color: var(--ink); font-weight: 600; font-size: 13px; background: var(--panel); }
+.step .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--soft); color: var(--accent-ink); font-size: 12px; font-weight: 800; }
+.step.done .n { background: var(--k5); color: #fff; }
+.check { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+.check .dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 11px; flex: none; }
+.check.ok .dot { background: var(--k5); border-color: var(--k5); color: #fff; }
+.kcard.brief .hook { font-weight: 700; font-size: 15px; color: var(--accent-ink); }
+.kcard.brief.approved { border-color: var(--k5); box-shadow: 0 0 0 2px color-mix(in srgb, var(--k5) 25%, transparent); }
+.kcard.brief.rejected { opacity: .55; }
+.warnline { color: var(--warn); }
 
 /* ---------- questions ---------- */
 .q { border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px; margin: 10px 0; }
