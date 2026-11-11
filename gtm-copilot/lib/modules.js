@@ -3,6 +3,7 @@ import { generate, generateJSON } from './gemini.js';
 import { systemFor } from './skills.js';
 import * as db from './db.js';
 import { crawlSite } from './sources.js';
+import { kbContext } from './knowledge.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const clip = (s = '', n = 5000) => (s.length > n ? `${s.slice(0, n)}\n…[truncated]` : s);
@@ -32,6 +33,7 @@ export async function buildContext(pid, { include = 'all', maxPer = 4500, exclud
       maxPer = per;
       ctx += `\n## Earlier analysis: ${a.key} (${(a.data.generated_at || '').slice(0, 10)})\n${clip(a.data.text, maxPer)}\n`;
     }
+    ctx += kbContext(recs);
     if (comps.length) ctx += `\n## Competitor teardowns\n${comps.map((c) => `### ${c.key} (${c.data.group})\n${clip(c.data.text, 2200)}`).join('\n')}\n`;
   }
   return { project: p, ctx, recs };

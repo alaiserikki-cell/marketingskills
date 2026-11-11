@@ -10,6 +10,7 @@ import { hasGemini, getModel } from './lib/gemini.js';
 import { listSkills } from './lib/skills.js';
 import { seedCircle } from './lib/seed.js';
 import * as G from './lib/growth.js';
+import * as K from './lib/knowledge.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -78,7 +79,13 @@ app.delete('/api/projects/:id/records/:kind', h((req) => db.deleteRecordsByKind(
 app.post('/api/projects/:id/run/profile', h((req) => M.runProfile(pid(req))));
 app.post('/api/projects/:id/run/market', h((req) => M.runMarket(pid(req))));
 app.post('/api/projects/:id/run/discover-competitors', h((req) => M.discoverCompetitors(pid(req))));
-app.post('/api/projects/:id/run/competitor', h((req) => M.runCompetitor(pid(req), req.body.name, req.body.group)));
+// ---------- knowledge hub ----------
+app.post('/api/projects/:id/kb/insights', h((req) => K.runInsights(pid(req), req.body.topic)));
+app.post('/api/projects/:id/kb/library', h((req) => K.runLibrary(pid(req), req.body.topic)));
+app.post('/api/projects/:id/kb/trends', h((req) => K.runTrends(pid(req), { topic: req.body.topic, terms: req.body.terms })));
+app.post('/api/projects/:id/kb/traffic', h((req) => K.runTraffic(pid(req), req.body.domains)));
+
+app.post('/api/projects/:id/run/competitor',h((req) => M.runCompetitor(pid(req), req.body.name, req.body.group)));
 app.post('/api/projects/:id/run/competitor-matrix', h((req) => M.runCompetitorMatrix(pid(req))));
 app.post('/api/projects/:id/run/questions', h((req) => M.runQuestions(pid(req))));
 app.post('/api/projects/:id/run/answers', h((req) => M.runAnswerSynthesis(pid(req))));

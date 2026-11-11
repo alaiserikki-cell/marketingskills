@@ -291,6 +291,77 @@ TABS.skills = () => {
     ${outs.map((a) => `<details><summary>${esc(a.key.slice(6))} <span class="meta">${new Date(a.data.generated_at).toLocaleString()}</span></summary><p class="meta">Brief: ${esc(a.data.brief || '')}</p><div class="md">${md(a.data.text)}</div>${sourcesHtml(a.data.sources)}<div class="row"><button class="small danger" data-del="${a.id}">Delete</button></div></details>`).join('') || '<p class="meta">None yet.</p>'}</div>`;
 };
 
+// ---------------- Knowledge hub ----------------
+function spark(values, { invert = false, w = 140, h = 34 } = {}) {
+  const v = values.filter((x) => x != null);
+  if (v.length < 2) return '';
+  const min = Math.min(...v), max = Math.max(...v), span = max - min || 1;
+  const pts = v.map((x, i) => {
+    const y = invert ? ((x - min) / span) : 1 - ((x - min) / span);
+    return `${((i / (v.length - 1)) * (w - 4) + 2).toFixed(1)},${(y * (h - 6) + 3).toFixed(1)}`;
+  }).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+const pctTag = (p) => (p == null ? '<span class="meta">—</span>' : `<span class="delta ${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p)}%</span>`);
+const motTag = (m) => (m ? `<span class="tag mot-${esc(m)}">${esc(m)}</span>` : '');
+
+function kbBlock(r, body) {
+  return `<details class="kb" ${r._open ? 'open' : ''}><summary>${esc(r.data.topic)} <span class="meta">${new Date(r.data.generated_at).toLocaleDateString()}</span></summary>
+    ${body}${sourcesHtml(r.data.sources)}
+    <div class="row"><button class="small danger" data-del="${r.id}">Delete</button></div></details>`;
+}
+
+const KB_RENDER = {
+  insights: (r) => kbBlock(r, `<div class="kgrid">${(r.data.cards || []).map((c) => `<div class="kcard">
+      <div class="kstat">${esc(c.stat)}</div><div class="khead">${esc(c.insight)}</div>
+      <div class="meta">${esc(c.publisher)} · ${esc(c.date)}</div>
+      <div class="kso"><b>So what:</b> ${esc(c.so_what)}</div>${motTag(c.motivation)}</div>`).join('')}</div>`),
+  library: (r) => kbBlock(r, `<div class="kgrid">${(r.data.cards || []).map((c) => `<div class="kcard">
+      <div class="khead">${esc(c.brand)} <span class="meta">${esc(c.year)}</span></div>
+      <div class="kcamp">${esc(c.campaign)}</div>
+      <p><b>What they did:</b> ${esc(c.tactic)}</p><p><b>Why it worked:</b> ${esc(c.why_it_worked)}</p>
+      <p class="meta"><b>Result:</b> ${esc(c.result)}</p>
+      <div class="kso"><b>Steal for ${esc(state.project.name)}:</b> ${esc(c.lesson)}</div>
+      <span class="tag">${esc(c.channel)}</span>${motTag(c.motivation)}</div>`).join('')}</div>`),
+  trends: (r) => kbBlock(r, `
+      <table class="simple"><tr><th>Topic</th><th>Wikipedia views, last 24 months</th><th>Avg / month (last 3)</th><th>Year on year</th><th>vs previous 3 months</th></tr>
+      ${(r.data.checks || []).map((c) => `<tr><td>${c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.term)}</a>` : esc(c.term)}</td>
+        <td>${c.error ? `<span class="meta">${esc(c.error)}</span>` : `<span class="trend-line">${spark(c.series.map((s) => s.views))}</span>`}</td>
+        <td>${c.monthly_avg_last3?.toLocaleString('en-IN') ?? '—'}</td><td>${pctTag(c.growth_yoy_pct)}</td><td>${pctTag(c.momentum_pct)}</td></tr>`).join('')}</table>
+      <p class="meta">Wikipedia views measure attention, not searches or sales, and are falling across the board as AI answers replace clicks. Compare topics with each other rather than reading a drop as decline.</p>
+      ${r.data.scout ? `<h3>Why each is rising</h3><table class="simple"><tr><th>Topic</th><th>Evidence</th><th>Relevance</th></tr>${r.data.scout.items.map((i) => `<tr><td>${esc(i.term)}</td><td>${esc(i.why_rising)} <span class="meta">(${esc(i.evidence_date)})</span></td><td>${esc(i.relevance)}</td></tr>`).join('')}</table>` : ''}`),
+  traffic: (r) => kbBlock(r, `
+      <table class="simple"><tr><th>Domain</th><th>Tranco rank</th><th>Rank, last 30 days</th><th>Change in 30 days</th></tr>
+      ${(r.data.rows || []).map((x) => `<tr><td><b>${esc(x.domain)}</b></td>
+        <td>${x.rank ? `#${x.rank.toLocaleString('en-IN')}` : `<span class="meta">${esc(x.error || 'not in top 1M')}</span>`}</td>
+        <td><span class="trend-line">${spark((x.series || []).map((s) => s.rank), { invert: true })}</span></td>
+        <td>${x.change == null ? '—' : `<span class="delta ${x.change >= 0 ? 'up' : 'down'}">${x.change >= 0 ? '▲' : '▼'} ${Math.abs(x.change).toLocaleString('en-IN')} places</span>`}</td></tr>`).join('')}</table>
+      <p class="meta">Lower rank = more traffic. Tranco blends several top-sites lists into one ranking; it is a relative signal, not visitor counts.</p>`),
+};
+
+const KB_SECTIONS = [
+  ['insights', 'Consumer insights', 'Like Think with Google: sourced stats about how Indians buy, sell and decide, each with a "so what" for this company.', 'Topic', 'e.g. how Indians buy used phones online', 'Find insights'],
+  ['library', 'Campaign library', 'Like Marketing Examples and Because of Marketing: real campaigns broken down into what they did, why it worked and what to steal. Linked to sources, never copied.', 'Theme', 'e.g. building trust for second-hand products', 'Find campaigns'],
+  ['trends', 'Trends', 'Like Exploding Topics: rising topics found through search, then checked against real monthly Wikipedia views. Or type your own terms to check.', 'Topic to scout', 'e.g. recommerce and thrifting in India', 'Scout trends'],
+  ['traffic', 'Traffic', 'Like Similarweb: compare websites on Tranco, a free research ranking of the top 1M sites, with 30-day movement.', 'Domains', 'circlestore.in, olx.in, cashify.in, spinny.com', 'Compare'],
+];
+
+TABS.knowledge = () => {
+  const kb = recs('kb').slice().reverse();
+  return `<div class="card khero"><h2>Knowledge hub</h2>
+    <p class="hint">The research library for ${esc(state.project.name)}. Every result is saved and fed into the other modules, so briefs, decks and experiments can cite it. All sources are free. Check figures against their source before quoting them.</p>
+    <div class="row">${KB_SECTIONS.map(([k, t]) => `<a href="#kb-${k}" class="tag">${t} (${kb.filter((r) => r.data.type === k).length})</a>`).join('')}</div></div>
+    ${KB_SECTIONS.map(([k, title, hint, label, ph, btn]) => {
+      const mine = kb.filter((r) => r.data.type === k);
+      if (mine[0]) mine[0]._open = true;
+      return `<div class="card" id="kb-${k}"><h2>${title}</h2><p class="hint">${hint}</p>
+        <div class="row"><input id="kbq-${k}" class="grow" placeholder="${esc(label)}: ${esc(ph)}">
+        ${k === 'trends' ? '<input id="kbterms" class="grow" placeholder="Optional: your own terms, comma separated">' : ''}
+        <button data-kb="${k}">${btn}</button></div>
+        ${mine.map((r) => KB_RENDER[k](r)).join('') || '<p class="meta">Nothing saved yet.</p>'}</div>`;
+    }).join('')}`;
+};
+
 function readModelInputs() {
   const inputs = {}, sources = {};
   document.querySelectorAll('[data-mi]').forEach((i) => { if (i.value.trim() !== '') inputs[i.dataset.mi] = i.value.replace(/[,₹\s]/g, ''); });
@@ -304,6 +375,7 @@ const PAGES = {
   questions: ['CEO questions', 'Clarifying questions for the founders, and their answers'],
   company: ['Company', 'What the company sells, traction, segments and positioning'],
   market: ['Market', 'Market size, categories, trust barriers and trends'],
+  knowledge: ['Knowledge hub', 'Consumer insights, campaign library, trends and traffic'],
   competitors: ['Competitors', 'What worked and what didn’t for competitors and brand analogs'],
   content: ['Content & posts', 'Posts collected, community listening and content analysis'],
   strategy: ['Brand & expansion', 'National positioning, localisation and where to expand'],
@@ -396,6 +468,13 @@ document.addEventListener('click', async (ev) => {
   if (t.dataset.grun) {
     const k = t.dataset.grun;
     return run(t, () => api('POST', P(`/growth/${k}`), { input: $(`#gin-${k}`)?.value || '', artifactKey: $(`#gart-${k}`)?.value || '' }), 'Done');
+  }
+  if (t.dataset.kb) {
+    const k = t.dataset.kb;
+    const q = val(`#kbq-${k}`);
+    const body = k === 'traffic' ? { domains: (q || '').split(',') }
+      : k === 'trends' ? { topic: q, terms: (val('#kbterms') || '').split(',') } : { topic: q };
+    return run(t, () => api('POST', P(`/kb/${k}`), body), 'Saved to the knowledge hub');
   }
   if (t.dataset.del) { if (confirm('Delete this item?')) { await api('DELETE', `/api/records/${t.dataset.del}`); await loadProject(); } return; }
 
