@@ -170,6 +170,12 @@ details.sources summary { font-weight: 600; font-size: 12.5px; }
 .kcard.brief.rejected { opacity: .55; }
 .warnline { color: var(--warn); }
 
+.expgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.expitem { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; cursor: pointer; background: var(--panel); }
+.expitem:has(input:checked) { border-color: var(--k5); background: color-mix(in srgb, var(--k5) 8%, var(--panel)); }
+.expitem.empty { opacity: .5; cursor: not-allowed; }
+.expitem input { margin-top: 3px; width: auto; }
+.expitem > span { display: flex; flex-direction: column; }
 .dl { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
 .dl .meta { margin-right: 4px; }
 

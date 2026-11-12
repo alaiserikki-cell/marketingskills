@@ -202,7 +202,7 @@ app.post('/api/projects/:id/posts/csv', h(async (req) => {
 // ---------- downloadable documents: .md, .docx (PDF is made in the browser from the .md) ----------
 app.get('/api/projects/:id/doc/:what.:ext(md|docx)', async (req, res) => {
   try {
-    const doc = await D.buildDoc(pid(req), req.params.what);
+    const doc = await D.buildDoc(pid(req), req.params.what, req.query.tabs);
     if (req.params.ext === 'docx') {
       const buf = await D.toDocx(doc);
       res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -215,6 +215,7 @@ app.get('/api/projects/:id/doc/:what.:ext(md|docx)', async (req, res) => {
     res.send(doc.md);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+app.get('/api/projects/:id/doc-sections', h((req) => D.sectionStatus(pid(req))));
 // Old links keep working.
 app.get('/api/projects/:id/export.md', (req, res) => res.redirect(`/api/projects/${req.params.id}/doc/pack.md`));
 

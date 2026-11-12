@@ -72,8 +72,8 @@ function saveBlob(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
-async function downloadDoc(what, fmt) {
-  const url = P(`/doc/${what}.${fmt === 'docx' ? 'docx' : 'md'}`);
+async function downloadDoc(what, fmt, query = '') {
+  const url = P(`/doc/${what}.${fmt === 'docx' ? 'docx' : 'md'}${query}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
   const name = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || `document.${fmt}`;
@@ -523,6 +523,28 @@ TABS.creative = () => {
   </div>`;
 };
 
+// ---------------- Export: one report from any combination of tabs ----------------
+function updateExportCount() {
+  const n = document.querySelectorAll('[data-exptab]:checked').length;
+  const el = $('#expCount');
+  if (el) el.textContent = `${n} tab${n === 1 ? '' : 's'} selected`;
+}
+
+TABS.export = () => {
+  const secs = state.sections;
+  if (!secs || secs._pid !== state.projectId) {
+    api('GET', P('/doc-sections')).then((s) => { s._pid = state.projectId; state.sections = s; if (state.tab === 'export') render(); }).catch((e) => toast(e.message, true));
+    return '<div class="card"><p class="meta">Checking what each tab has…</p></div>';
+  }
+  const kb = (c) => (c > 0 ? `~${Math.max(1, Math.round(c / 3200))} PDF page${c > 3200 * 1.5 ? 's' : ''}` : 'nothing yet');
+  return `<div class="card"><h2>Download a report</h2>
+    <p class="hint">Tick the tabs you want and download one document with a contents page and a chapter per tab. Sources stay clickable. Tabs with nothing generated yet are greyed out.</p>
+    <div class="row"><button class="small ghost" id="expAll">Select all</button><button class="small ghost" id="expNone">Clear</button><span class="meta" id="expCount"></span></div>
+    <div class="expgrid">${secs.map((s) => `<label class="expitem ${s.chars ? '' : 'empty'}"><input type="checkbox" data-exptab="${s.key}" ${s.chars ? 'checked' : 'disabled'}><span><b>${esc(s.title)}</b><span class="meta">${kb(s.chars)}</span></span></label>`).join('')}</div>
+    <div class="row" style="margin-top:14px"><button data-exportfmt="pdf">Download PDF</button><button class="ghost" data-exportfmt="docx">Download Word</button><button class="ghost" data-exportfmt="md">Markdown</button></div>
+    <p class="meta">A full report can run to 150+ PDF pages and take 10–20 seconds to build. Page counts are rough.</p></div>`;
+};
+
 function readModelInputs() {
   const inputs = {}, sources = {};
   document.querySelectorAll('[data-mi]').forEach((i) => { if (i.value.trim() !== '') inputs[i.dataset.mi] = i.value.replace(/[,₹\s]/g, ''); });
@@ -536,6 +558,7 @@ const PAGES = {
   questions: ['CEO questions', 'Clarifying questions for the founders, and their answers'],
   company: ['Company', 'What the company sells, traction, segments and positioning'],
   market: ['Market', 'Market size, categories, trust barriers and trends'],
+  export: ['Download report', 'Export any or all tabs as one PDF or Word document'],
   creative: ['Creative studio', 'Research → audience → brief → script → present'],
   knowledge: ['Knowledge hub', 'Consumer insights, campaign library, trends and traffic'],
   competitors: ['Competitors', 'What worked and what didn’t for competitors and brand analogs'],
@@ -578,6 +601,7 @@ function render() {
     return;
   }
   $('#main').innerHTML = TABS[state.tab]();
+  if (state.tab === 'export') updateExportCount();
 }
 
 async function loadProjects() {
@@ -593,6 +617,7 @@ async function loadProject() {
   const d = await api('GET', `/api/projects/${state.projectId}`);
   state.project = d.project;
   state.records = d.records;
+  state.sections = null; // re-check what each tab has for the export panel
   try { localStorage.setItem('gtm.pid', state.projectId); } catch {}
   render();
 }
@@ -631,6 +656,16 @@ document.addEventListener('click', async (ev) => {
     const k = t.dataset.grun;
     return run(t, () => api('POST', P(`/growth/${k}`), { input: $(`#gin-${k}`)?.value || '', artifactKey: $(`#gart-${k}`)?.value || '' }), 'Done');
   }
+  if (t.dataset.exportfmt) {
+    const tabs = [...document.querySelectorAll('[data-exptab]')].filter((c) => c.checked).map((c) => c.dataset.exptab);
+    if (!tabs.length) return toast('Tick at least one tab', true);
+    const label = t.textContent; t.disabled = true; t.classList.add('spin');
+    try { await downloadDoc('custom', t.dataset.exportfmt, `?tabs=${encodeURIComponent(tabs.join(','))}`); toast('Report downloaded'); }
+    catch (e) { toast(e.message, true); }
+    finally { t.disabled = false; t.classList.remove('spin'); t.textContent = label; }
+    return;
+  }
+  if (id === 'expAll' || id === 'expNone') { document.querySelectorAll('[data-exptab]:not(:disabled)').forEach((c) => { c.checked = id === 'expAll'; }); return updateExportCount(); }
   if (t.dataset.dl) {
     const label = t.textContent; t.disabled = true; t.classList.add('spin');
     try { await downloadDoc(t.dataset.dl, t.dataset.fmt); } catch (e) { toast(e.message, true); }
@@ -708,6 +743,7 @@ document.addEventListener('click', async (ev) => {
 // Save answers / selects on change.
 document.addEventListener('change', async (ev) => {
   const el = ev.target;
+  if (el.dataset.exptab) return updateExportCount();
   try {
     if (el.dataset.answer) { await api('PUT', `/api/records/${el.dataset.answer}`, { answer: el.value, status: el.value.trim() ? 'answered' : 'open' }); toast('Answer saved'); }
     else if (el.dataset.prio) await api('PUT', `/api/records/${el.dataset.prio}`, { priority: el.value });
