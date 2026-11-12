@@ -170,6 +170,9 @@ details.sources summary { font-weight: 600; font-size: 12.5px; }
 .kcard.brief.rejected { opacity: .55; }
 .warnline { color: var(--warn); }
 
+.dl { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
+.dl .meta { margin-right: 4px; }
+
 /* ---------- questions ---------- */
 .q { border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px; margin: 10px 0; }
 .q.top { background: var(--top); border-color: color-mix(in srgb, var(--k4) 45%, var(--line)); }

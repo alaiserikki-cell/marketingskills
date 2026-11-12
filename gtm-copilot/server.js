@@ -12,6 +12,7 @@ import { seedCircle } from './lib/seed.js';
 import * as G from './lib/growth.js';
 import * as K from './lib/knowledge.js';
 import * as C from './lib/creative.js';
+import * as D from './lib/docs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -85,12 +86,7 @@ app.get('/api/projects/:id/creative/research', h((req) => C.researchStatus(pid(r
 app.post('/api/projects/:id/creative/avatar', h((req) => C.runAvatar(pid(req), req.body.focus)));
 app.post('/api/projects/:id/creative/brief', h((req) => C.runBrief(pid(req), req.body)));
 app.post('/api/projects/:id/creative/script/:bid', h((req) => C.runScript(pid(req), req.params.bid, req.body)));
-app.get('/api/projects/:id/creative-pack.md', async (req, res) => {
-  try {
-    res.set('Content-Type', 'text/markdown; charset=utf-8').set('Content-Disposition', 'attachment; filename="creative-pack.md"');
-    res.send(await C.creativePack(pid(req)));
-  } catch (e) { res.status(400).json({ error: e.message }); }
-});
+app.get('/api/projects/:id/creative-pack.md', (req, res) => res.redirect(`/api/projects/${req.params.id}/doc/creative.md`));
 
 // ---------- knowledge hub ----------
 app.post('/api/projects/:id/kb/insights', h((req) => K.runInsights(pid(req), req.body.topic)));
@@ -203,32 +199,24 @@ app.post('/api/projects/:id/posts/csv', h(async (req) => {
 }));
 
 // ---------- export ----------
-app.get('/api/projects/:id/export.md', async (req, res) => {
-  const p = await db.getProject(pid(req));
-  const recs = await db.listRecords(pid(req));
-  const order = ['problem_statement', 'company_profile', 'market_research', 'competitor_landscape', 'ceo_answers_synthesis', 'community_listening', 'content_analysis', 'brand_strategy', 'expansion_plan', 'insight_doc', 'solution_doc', 'growth_playbook', 'deck_outline'];
-  let md = `# ${p.name} — GTM research pack\n_Exported ${new Date().toISOString().slice(0, 10)}_\n`;
-  const facts = recs.filter((r) => r.kind === 'fact');
-  if (facts.length) md += `\n## Verified facts\n${facts.map((f) => `- ${f.data.text} _(source: ${f.data.source})_`).join('\n')}\n`;
-  const arts = recs.filter((r) => r.kind === 'artifact');
-  const keys = [...order, ...arts.map((a) => a.key).filter((k) => !order.includes(k))];
-  for (const key of keys) {
-    const a = arts.find((r) => r.key === key);
-    if (!a) continue;
-    md += `\n\n# ${key.replace(/_/g, ' ')}\n\n${a.data.text}\n`;
-    if (a.data.sources?.length) md += `\n**Sources:**\n${a.data.sources.map((s) => `- [${s.title}](${s.uri})`).join('\n')}\n`;
-  }
-  for (const c of recs.filter((r) => r.kind === 'competitor')) {
-    md += `\n\n# Competitor: ${c.key} (${c.data.group})\n\n${c.data.text}\n${(c.data.sources || []).map((s) => `- [${s.title}](${s.uri})`).join('\n')}\n`;
-  }
-  const qs = recs.filter((r) => r.kind === 'question');
-  if (qs.length) md += `\n\n# Questions for the founders\n${qs.map((q) => `- **[${q.data.priority}] ${q.data.question}**\n  - Why: ${q.data.why}\n  - Answer: ${q.data.answer || '_(pending)_'}`).join('\n')}\n`;
-  const ex = recs.filter((r) => r.kind === 'experiment');
-  if (ex.length) md += `\n\n# Experiments\n${ex.map((e) => `## ${e.data.name} (${e.data.status})\n- Hypothesis: ${e.data.hypothesis}\n- Primary metric: ${e.data.primary_metric}\n- Iterations: ${(e.data.iterations || []).length}\n${e.data.review ? `\n${e.data.review}\n` : ''}`).join('\n')}\n`;
-  res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${p.name.replace(/\W+/g, '_')}_gtm_pack.md"`);
-  res.send(md);
+// ---------- downloadable documents: .md, .docx (PDF is made in the browser from the .md) ----------
+app.get('/api/projects/:id/doc/:what.:ext(md|docx)', async (req, res) => {
+  try {
+    const doc = await D.buildDoc(pid(req), req.params.what);
+    if (req.params.ext === 'docx') {
+      const buf = await D.toDocx(doc);
+      res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.set('Content-Disposition', `attachment; filename="${D.fileName(doc.title, 'docx')}"`);
+      return res.send(Buffer.from(buf));
+    }
+    res.set('Content-Type', 'text/markdown; charset=utf-8');
+    res.set('X-Doc-Title', encodeURIComponent(doc.title));
+    res.set('Content-Disposition', `attachment; filename="${D.fileName(doc.title, 'md')}"`);
+    res.send(doc.md);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Old links keep working.
+app.get('/api/projects/:id/export.md', (req, res) => res.redirect(`/api/projects/${req.params.id}/doc/pack.md`));
 
 export default app;
 

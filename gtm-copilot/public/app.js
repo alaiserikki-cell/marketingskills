@@ -52,12 +52,58 @@ function sourcesHtml(sources = []) {
   return `<details class="sources"><summary>All ${sources.length} sources searched</summary><ol>${sources.map((s) => `<li><a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title)}</a></li>`).join('')}</ol></details>`;
 }
 
+// ---------------- downloads: PDF / Word / Markdown ----------------
+const dlButtons = (what, label = '') => `<span class="dl">${label ? `<span class="meta">${label}</span>` : ''}<button class="small ghost" data-dl="${what}" data-fmt="pdf">PDF</button><button class="small ghost" data-dl="${what}" data-fmt="docx">Word</button><button class="small ghost" data-dl="${what}" data-fmt="md">.md</button></span>`;
+
+function loadScript(src) {
+  return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error(`Could not load ${src}`)); document.head.appendChild(s); });
+}
+let pdfLibs = null;
+const ensurePdf = () => (pdfLibs ||= (async () => {
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js');
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.min.js');
+  await loadScript('https://cdn.jsdelivr.net/npm/html-to-pdfmake@2.5.30/browser.js');
+})().catch((e) => { pdfLibs = null; throw e; }));
+
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+async function downloadDoc(what, fmt) {
+  const url = P(`/doc/${what}.${fmt === 'docx' ? 'docx' : 'md'}`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+  const name = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || `document.${fmt}`;
+  if (fmt !== 'pdf') return saveBlob(await res.blob(), name);
+  // The PDF font (Roboto) has ₹ but no arrows, ticks or emoji: swap them for text so nothing prints as a box.
+  const md = (await res.text())
+    .replace(/\$\\rightarrow\$|[→⟶➔➜]/g, '->').replace(/[←]/g, '<-').replace(/[↑▲]/g, '+').replace(/[↓▼]/g, '-')
+    .replace(/[✓✔✅]/g, 'Yes').replace(/[✗✘❌]/g, 'No').replace(/[★⭐]/g, '*').replace(/[⚠]/g, '!')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '');
+  const title = decodeURIComponent(res.headers.get('X-Doc-Title') || 'Document');
+  await ensurePdf();
+  const html = DOMPurify.sanitize(marked.parse(md));
+  const content = htmlToPdfmake(html, { tableAutoSize: true, defaultStyles: {
+    h1: { fontSize: 17, bold: true, marginBottom: 6, color: '#17211d' }, h2: { fontSize: 13.5, bold: true, marginTop: 10, marginBottom: 4, color: '#235e52' },
+    h3: { fontSize: 11.5, bold: true, marginTop: 6, marginBottom: 3 }, a: { color: '#1a6b5a', decoration: 'underline' },
+    th: { bold: true, fillColor: '#235e52', color: '#ffffff' }, td: { fontSize: 8.5 }, p: { marginBottom: 4 }, li: { marginBottom: 2 },
+  } });
+  pdfMake.createPdf({
+    info: { title, creator: 'GTM Copilot' }, pageSize: 'A4', pageMargins: [36, 40, 36, 44],
+    defaultStyle: { fontSize: 9.5, lineHeight: 1.2 }, content,
+    footer: (cur, total) => ({ text: `${title} · ${cur} / ${total}`, alignment: 'center', fontSize: 7.5, color: '#888', margin: [0, 14, 0, 0] }),
+  }).download(name.replace(/\.md$/, '.pdf'));
+}
+
 function artifactCard(key, title, hint, runPath, extraBtns = '') {
   const a = artifact(key);
   return `<div class="card">
     <h2>${title}</h2><p class="hint">${hint}</p>
     <div class="row"><button data-run="${runPath}" data-msg="${esc(title)} ready">${a ? 'Re-run' : 'Run'} ${title.toLowerCase()}</button>${extraBtns}
-    ${a ? `<span class="meta">Generated ${new Date(a.data.generated_at).toLocaleString()} ${a.data.model ? `· ${esc(a.data.model)}` : ''}</span>` : ''}</div>
+    ${a ? `<span class="meta">Generated ${new Date(a.data.generated_at).toLocaleString()} ${a.data.model ? `· ${esc(a.data.model)}` : ''}</span>${dlButtons(`record-${a.id}`)}` : ''}</div>
     ${a?.data.site_error ? `<p class="hint">⚠ ${esc(a.data.site_error)}</p>` : ''}
     ${a ? `<div class="md">${md(a.data.text)}</div>${sourcesHtml(a.data.sources)}` : '<p class="meta">Not run yet.</p>'}
   </div>`;
@@ -112,7 +158,7 @@ const TABS = {
     ${artifactCard('competitor_landscape', 'Competitive landscape', 'Matrix, positioning map, patterns across winners, whitespace, your defensible edge and threats — synthesised from the teardowns.', '/run/competitor-matrix')}
     <div class="card"><h2>Teardowns (${comps.length})</h2>
       ${comps.map((c) => `<details><summary>${esc(c.key)} <span class="tag">${esc(c.data.group)}</span><span class="meta">${new Date(c.data.generated_at).toLocaleDateString()}</span></summary>
-        <div class="row"><button class="small ghost" data-recomp="${esc(c.key)}" data-group="${esc(c.data.group)}">Re-run</button><button class="small danger" data-del="${c.id}">Delete</button></div>
+        <div class="row"><button class="small ghost" data-recomp="${esc(c.key)}" data-group="${esc(c.data.group)}">Re-run</button><button class="small danger" data-del="${c.id}">Delete</button>${dlButtons(`record-${c.id}`)}</div>
         <div class="md">${md(c.data.text)}</div>${sourcesHtml(c.data.sources)}</details>`).join('') || '<p class="meta">None yet.</p>'}
     </div>`;
   },
@@ -214,8 +260,8 @@ const TABS = {
 
   reports: () => `
     <div class="card"><h2>Deliverables</h2>
-      <p class="hint">Built only from what's in the tool (facts, CEO answers, research, teardowns, content data, experiments). Run the research modules first. Download everything as one Markdown pack for Docs/Notion.</p>
-      <div class="row"><a href="${P('/export.md')}"><button class="ghost">Download full pack (.md)</button></a></div>
+      <p class="hint">Built only from what's in the tool (facts, CEO answers, research, teardowns, content data, experiments). Run the research modules first. Download everything as one document (PDF, Word or Markdown), or any single report from its own card.</p>
+      <div class="row">${dlButtons('pack', 'Full research pack:')}</div>
     </div>
     ${artifactCard('insight_doc', 'Insight document', 'Company + competitor research, personas, and 3–5 insights each with evidence and a "so what" (Week 2).', '/run/report/insight_doc')}
     ${artifactCard('solution_doc', 'Solution document', 'One recommendation with cost and impact, frameworks, tools and approach (Checkpoint 1).', '/run/report/solution_doc')}
@@ -243,7 +289,7 @@ const prettyKey = (k) => {
 
 function outputBlock(a) {
   if (!a) return '<p class="meta">Not run yet.</p>';
-  return `<div class="row"><span class="meta">Generated ${new Date(a.data.generated_at).toLocaleString()} ${a.data.model ? `· ${esc(a.data.model)}` : ''}</span></div>
+  return `<div class="row"><span class="meta">Generated ${new Date(a.data.generated_at).toLocaleString()} ${a.data.model ? `· ${esc(a.data.model)}` : ''}</span>${dlButtons(`record-${a.id}`)}</div>
     <details ${a.data.text.length < 2500 ? 'open' : ''}><summary>Output</summary><div class="md">${md(a.data.text)}</div>${sourcesHtml(a.data.sources)}</details>`;
 }
 
@@ -472,7 +518,7 @@ TABS.creative = () => {
 
   <div class="card" id="cs-5"><h2>5 · Present</h2>
     <p class="hint">One document for the client or your manager: who we're talking to, then each approved concept with its script, visuals, editing notes and references. Paste it into Google Docs or Notion.</p>
-    <div class="row"><a href="${P('/creative-pack.md')}"><button>Download creative pack (.md)</button></a><button class="ghost" id="csCopy">Copy pack</button>
+    <div class="row">${dlButtons('creative', 'Creative pack:')}<button class="small ghost" id="csCopy">Copy text</button>
       <span class="meta">${approved.length} approved · ${approved.filter((b) => scripts.some((s) => s.key === String(b.id))).length} scripted</span></div>
   </div>`;
 };
@@ -585,6 +631,12 @@ document.addEventListener('click', async (ev) => {
     const k = t.dataset.grun;
     return run(t, () => api('POST', P(`/growth/${k}`), { input: $(`#gin-${k}`)?.value || '', artifactKey: $(`#gart-${k}`)?.value || '' }), 'Done');
   }
+  if (t.dataset.dl) {
+    const label = t.textContent; t.disabled = true; t.classList.add('spin');
+    try { await downloadDoc(t.dataset.dl, t.dataset.fmt); } catch (e) { toast(e.message, true); }
+    finally { t.disabled = false; t.classList.remove('spin'); t.textContent = label; }
+    return;
+  }
   if (t.dataset.cs === 'avatar') return run(t, () => api('POST', P('/creative/avatar'), { focus: val('#csFocus') }), 'Avatars ready');
   if (t.dataset.cs === 'brief') {
     if (!val('#csGoal')) return toast('Write the campaign goal first', true);
@@ -592,7 +644,7 @@ document.addEventListener('click', async (ev) => {
   }
   if (t.dataset.script) return run(t, () => api('POST', P(`/creative/script/${t.dataset.script}`), { tone: val(`#tone-${t.dataset.script}`), duration: val(`#dur-${t.dataset.script}`) }), 'Script ready');
   if (id === 'csCopy') {
-    const r = await fetch(P('/creative-pack.md'));
+    const r = await fetch(P('/doc/creative.md'));
     await navigator.clipboard.writeText(await r.text());
     return toast('Creative pack copied');
   }
